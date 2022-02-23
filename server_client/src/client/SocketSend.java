@@ -10,6 +10,9 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.Socket;
 import java.net.SocketException;
+import java.nio.charset.Charset;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 
 /**
  * TCP通信クラス<BR>
@@ -27,8 +30,14 @@ public class SocketSend implements Runnable {
 	/** TCP通信終端文字 */
 	private static final String EOF = "$end$";
 
+	/** 日付フォーマット */
+	private static final SimpleDateFormat SDF = new SimpleDateFormat("yyyy/MM/dd hh:mm:ss.SSS");
+
 	/** スレッド番号 */
 	private int threadNo = 0;
+	
+	/** テキスト出力用バッファ */
+	private StringBuilder str = new StringBuilder();
 
 	/**
 	 * コンストラクタ
@@ -37,7 +46,10 @@ public class SocketSend implements Runnable {
 	 */
 	public SocketSend(int no) {
 
+		str.append(log("起動時刻", SDF.format(new Date())));
 		this.threadNo = no;
+		str.append(log("スレッド番号", threadNo));
+		str.append(log("スレッド名", Thread.currentThread().getName()));
 	}
 
 	@Override
@@ -50,8 +62,7 @@ public class SocketSend implements Runnable {
 		// TCP通信受信ログファイル
 		File fos = null;
 
-		StringBuilder str = new StringBuilder();
-		String separator = System.lineSeparator();
+		str.append(log("処理開始時刻", SDF.format(new Date())));
 
 		// 送信データ読み込み用
 		BufferedReader bufferedReader_txt_in = null;
@@ -76,30 +87,33 @@ public class SocketSend implements Runnable {
 			socket = new Socket("localhost", PORT_NO);
 
 			// 入出力ストリームを準備
-			File inputFile = new File("C:\\Users\\itsys\\Desktop\\client_sever\\client_send" + threadNo + ".txt");
+			File inputFile = new File("C:\\Users\\Administrator\\Desktop\\client_sever\\client_send" + threadNo + ".txt");
 			bufferedReader_txt_in = new BufferedReader(new FileReader(inputFile));
 
-			fos = new File("C:\\Users\\itsys\\Desktop\\client_sever\\client_recv" + threadNo + ".txt");
+			fos = new File("C:\\Users\\Administrator\\Desktop\\client_sever\\client_recv" + threadNo + ".txt");
 
 			// 入力ストリームの内容を全て送信
 			output = new DataOutputStream(socket.getOutputStream());
 
-			str.append("スレッドNo＝" + threadNo + separator + "スレッドName＝" + Thread.currentThread().getName() + separator);
+			String separator = System.lineSeparator();
 
+			str.append(log("送信メッセージ", ""));
 			while ((line = bufferedReader_txt_in.readLine()) != null) {
 
 				// ローカルファイルを終了まで読み込む
-				System.out.println(line);
-				str.append(line + separator);
+				str.append(line);
+				str.append(separator);
 			}
 
 			// 終端文字を付与
-			str.append("$end$");
+			str.append(log("要求送信時刻", SDF.format(new Date())));
+			str.append(EOF);
+			str.append(separator);
 
-			output.writeUTF(str.toString());
+			output.write(str.toString().getBytes());
 			output.write(0);
 
-			System.out.println("client_output=" + str.toString());
+			System.out.println(str.toString());
 			
 			// ------------------------------------------------------
 			// サーバからのレスポンスを受信し、ファイルに出力
@@ -109,16 +123,23 @@ public class SocketSend implements Runnable {
 			bufferedReader_server_in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
 			// textfile用 bufferedWriterを準備する
 			bufferedWriter_textfile = new BufferedWriter(new FileWriter(fos));
+			
+//			str.delete(0, str.length());
+			str.append(log("応答受信時刻", SDF.format(new Date())));
+			str.append(log("受信メッセージ", "▽▽▽▽▽▽▽▽▽▽"));
 
 			while (!(line = bufferedReader_server_in.readLine()).equals(EOF)) {
 
 				// 受信したデータを終了まで読み込む
-				bufferedWriter_textfile.write(line + separator);
-				bufferedWriter_textfile.flush();
+				str.append(line);
+				str.append(separator);
 
-				System.out.println("client_recv=" + line);
+//				System.out.println("client_recv=" + line);
 			}
+			str.append(log("受信メッセージ", "△△△△△△△△△△"));
 
+			bufferedWriter_textfile.write(str.toString());
+			bufferedWriter_textfile.flush();
 		} catch (SocketException e) {
 			System.out.println("SocketSend_occured SocketException.");
 			e.printStackTrace();
@@ -138,4 +159,51 @@ public class SocketSend implements Runnable {
 
 		System.out.println("SocketSend run end.");
 	}
+	
+	/**
+	 * ログ整形文字作成（key=valueの形式にする）
+	 * 
+	 * @param key ログ出力文字左辺
+	 * @param value ログ出力文字左辺
+	 */
+	private String log(String key, int value) {
+		
+		return log(key, String.valueOf(value));
+	}
+	
+	/**
+	 * ログ整形文字作成（key=valueの形式にする）
+	 * 
+	 * @param key ログ出力文字左辺
+	 * @param value ログ出力文字左辺
+	 */
+	private String log(String key, String value) {
+		
+		return format(key, value);
+	}
+	
+	/**
+	 * 固定長文字を作成
+	 * 
+	 * @param key ログ出力文字左辺
+	 * @param value  ログ出力文字左辺
+	 * @return
+	 */
+    private String format(String key, String value){
+    	
+    	int length = 16;
+        int byteDiff = (getByteLength(key, Charset.forName("UTF-8")) - key.length())/2;
+        return String.format("【Client】%-" + (length - byteDiff) + "s = %s", key, value) + System.lineSeparator();
+    }
+
+    /**
+     * 指定した文字コードの文字列長を取得する
+     * @param string 文字列
+     * @param charset 文字コード
+     * @return
+     */
+    private int getByteLength(String string, Charset charset) {
+        return string.getBytes(charset).length;
+    }
+		
 }
